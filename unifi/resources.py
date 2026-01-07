@@ -44,7 +44,7 @@ class BaseResource:
                 raise ValueError(f'The attribute [name] must be of type str, not {type(value)}.')
         self._name = value
 
-    def get(self, **filters):
+    def get(self, **filters: dict):
         """
         Fetches and returns a single resource from the API based on the specified filters. The method
         retrieves all items available through the API endpoint and filters them according to the given

@@ -1,18 +1,17 @@
-import json
 from dotenv import load_dotenv
 from slugify import slugify
 import os
 import re
-import sys
 import requests
 import warnings
 import logging
-import pynetbox
+import pynetbox 
 import ipaddress
 import yaml
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib3.exceptions import InsecureRequestWarning
 # Import the unifi module instead of defining the Unifi class
+from unifi.sites import Sites
 from unifi.unifi import Unifi
 # Suppress only the InsecureRequestWarning
 warnings.simplefilter("ignore", InsecureRequestWarning)
@@ -200,7 +199,7 @@ def setup_logging(min_log_level=logging.INFO):
 
     logging.info(f"Logging is set up. Minimum log level: {logging.getLevelName(min_log_level)}")
 
-def load_config(config_path="config/config.yaml"):
+def load_config(config_path: str = "config/config.yaml") -> dict:
     """
     Reads the configuration from a YAML file.
 
@@ -217,7 +216,7 @@ def load_config(config_path="config/config.yaml"):
         except yaml.YAMLError as e:
             raise Exception(f"Error reading configuration file: {e}")
 
-def process_device(unifi, nb, site, device, nb_ubiquity, tenant):
+def process_device(unifi: Unifi, nb: pynetbox.api, site: Sites, device: dict, nb_ubiquity: dict, tenant):
     """Process a device and add it to NetBox."""
     try:
         logger.info(f"Processing device {device['name']} at site {site}...")
@@ -270,9 +269,15 @@ def process_device(unifi, nb, site, device, nb_ubiquity, tenant):
                 logger.error(f"Failed to create device type for {device['name']} at site {site}: {e}")
                 return
             if len(device.get("port_table", [])) > 0:
+                logger.warning(f"Port table for device {device['name']}: {len(device.get("port_table", []))}\n{device.get("port_table")}")
                 for port in device["port_table"]:
-                    if port["media"] == "GE":
-                        port_type = "1000base-t"
+                    # Choices can be found here: https://github.com/netbox-community/netbox/blob/main/netbox/dcim/choices.py
+                    SPEED_MAP = {
+                        "GE": "1000base-t",
+                        "2P5GE": "2.5gbase-t",
+                    }
+                    port_type = SPEED_MAP.get(port["media"])
+                    if port_type:
                         try:
                             template = nb.dcim.interface_templates.create({
                                 "device_type": nb_device_type.id,
@@ -290,6 +295,8 @@ def process_device(unifi, nb, site, device, nb_ubiquity, tenant):
             logger.info(f"Device {device['name']} with serial {device['serial']} already exists. Skipping...")
             return
 
+        logger.warning(f"Postable fields: {get_postable_fields(netbox_url, netbox_token, 'dcim/devices')}")
+
         # Create NetBox Device
         try:
             device_data = {
@@ -300,7 +307,7 @@ def process_device(unifi, nb, site, device, nb_ubiquity, tenant):
                     'serial': device["serial"]
                 }
 
-            logger.debug(f"Getting postable fields for NetBox API")
+            logger.debug("Getting postable fields for NetBox API")
             available_fields = get_postable_fields(netbox_url, netbox_token, 'dcim/devices')
             logger.debug(f"Available NetBox API fields: {list(available_fields.keys())}")
             if 'role' in available_fields:
@@ -310,8 +317,8 @@ def process_device(unifi, nb, site, device, nb_ubiquity, tenant):
                 logger.debug(f"Using 'device_role' field for device role (ID: {nb_device_role.id})")
                 device_data['device_role'] = nb_device_role.id
             else:
-                logger.error(f'Could not determine the syntax for the role. Skipping device {device_name}, '
-                                f'{serial}.')
+                logger.error(f'Could not determine the syntax for the role. Skipping device {device["name"]}, '
+                                f'{device["serial"]}.')
                 return None
 
             # Add the device to Netbox
@@ -396,7 +403,7 @@ def process_device(unifi, nb, site, device, nb_ubiquity, tenant):
     except Exception as e:
         logger.exception(f"Failed to process device {device['name']} at site {site}: {e}")
 
-def process_site(unifi, nb, site_name, nb_site, nb_ubiquity, tenant):
+def process_site(unifi: Unifi, nb, site_name: str, nb_site: Sites, nb_ubiquity, tenant):
     """
     Process devices for a given site and add them to NetBox.
     """
@@ -406,12 +413,14 @@ def process_site(unifi, nb, site_name, nb_site, nb_ubiquity, tenant):
         site = unifi.site(site_name)
         if site:
             logger.debug(f"Fetching devices for site: {site_name}")
-            devices = site.device.all()
+            devices: list[dict] = site.device.all()
             logger.debug(f"Found {len(devices)} devices for site {site_name}")
 
             with ThreadPoolExecutor(max_workers=MAX_DEVICE_THREADS) as executor:
                 futures = []
                 for device in devices:
+                    # TODO: VRF creation will happen multiple times as devices are processed in parallel
+                    # Deleting all but one manually is a stopgap solution
                     futures.append(executor.submit(process_device, unifi, nb, nb_site, device, nb_ubiquity, tenant))
 
                 for future in as_completed(futures):
@@ -424,8 +433,8 @@ def process_site(unifi, nb, site_name, nb_site, nb_ubiquity, tenant):
     except Exception as e:
         logger.error(f"Failed to process site {site_name}: {e}")
 
-def process_controller(unifi_url, unifi_username, unifi_password, unifi_mfa_secret, nb, nb_ubiquity, tenant,
-                       netbox_sites_dict, config=None):
+def process_controller(unifi_url: str, unifi_username: str, unifi_password: str, unifi_mfa_secret: str, nb, nb_ubiquity, tenant,
+                       netbox_sites_dict: dict, config: dict = None):
     """
     Process all sites and devices for a specific UniFi controller.
     """
@@ -461,8 +470,8 @@ def process_controller(unifi_url, unifi_username, unifi_password, unifi_mfa_secr
     except Exception as e:
         logger.error(f"Error processing controller {unifi_url}: {e}")
 
-def process_all_controllers(unifi_url_list, unifi_username, unifi_password, unifi_mfa_secret, nb, nb_ubiquity, tenant,
-                            netbox_sites_dict, config=None):
+def process_all_controllers(unifi_url_list: list[str], unifi_username: str, unifi_password: str, unifi_mfa_secret: str, nb, nb_ubiquity, tenant,
+                            netbox_sites_dict: dict, config: dict = None):
     """
     Process all UniFi controllers in parallel.
     """
@@ -591,10 +600,10 @@ if __name__ == "__main__":
     if args.verbose:
         logger.debug("Verbose logging enabled")
     logger.debug("Loading configuration")
-    config = load_config()
+    config: dict = load_config()
     logger.debug("Configuration loaded successfully")
     try:
-        unifi_url_list = config['UNIFI']['URLS']
+        unifi_url_list: list[str] = config['UNIFI']['URLS']
     except ValueError:
         logger.exception("Unifi URL is missing from configuration.")
         raise SystemExit(1)
@@ -609,7 +618,7 @@ if __name__ == "__main__":
 
     # Connect to Netbox
     try:
-        netbox_url = config['NETBOX']['URL']
+        netbox_url: str = config['NETBOX']['URL']
     except ValueError:
         logger.exception("Netbox URL is missing from configuration.")
         raise SystemExit(1)

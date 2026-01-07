@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 import requests
 import warnings
 import json
@@ -256,7 +257,7 @@ class Unifi:
             logger.debug(f"Invalid JSON in response from: {url}")
             return None
 
-    def get_sites(self) -> dict:
+    def get_sites(self) -> dict[Any, Sites]:
         """
         Fetches the list of sites from the Unifi controller.
 
@@ -298,7 +299,7 @@ class Unifi:
             logger.error(f"Failed to get sites: {error_msg}")
             return {}
 
-    def site(self, name):
+    def site(self, name) -> Sites | None:
         """Get a single site by name."""
         logger.debug(f"Looking up site: {name}")
         site = self.sites.get(name)
