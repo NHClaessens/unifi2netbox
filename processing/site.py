@@ -5,7 +5,7 @@ from unifi.sites import Sites
 from unifi.unifi import Unifi
 from util import match_sites_to_netbox
 from context import AppContext
-from processing.device import process_device
+from processing.device import process_device, process_client
 
 # Define threads for each layer
 MAX_DEVICE_THREADS = 8  # Number of devices to process concurrently per site
@@ -58,17 +58,17 @@ def process_site(unifi: Unifi, site_name: str, nb_site: Sites, ctx: AppContext):
                         logger.error(f"Error processing a device at site {site_name}: {e}")
 
             client_devices: list[dict] = site.client_device.all()
+            logger.debug(f"Found {len(client_devices)} client devices for site {site_name}")
             with ThreadPoolExecutor(max_workers=MAX_DEVICE_THREADS) as executor:
                 futures = []
-                # for client_device in client_devices:
-                #    TODO: Process client devices
-                # futures.append(executor.submit(process_device, unifi, nb, nb_site, device, nb_ubiquity, tenant))
+                for client_device in client_devices:
+                    futures.append(executor.submit(process_client, unifi, nb_site, client_device, ctx))
 
                 for future in as_completed(futures):
                     try:
                         future.result()
                     except Exception as e:
-                        logger.error(f"Error processing a device at site {site_name}: {e}")
+                        logger.error(f"Error processing a client device at site {site_name}: {e}")
         else:
             logger.error(f"Site {site_name} not found")
     except Exception as e:
