@@ -4,10 +4,11 @@ from unifi.sites import Sites
 from unifi.unifi import Unifi
 from util import get_unifi_site_name
 from context import AppContext
+from custom_types import UniFiDevice
 import pynetbox
 
 
-def process_cables(unifi: Unifi, nb: pynetbox.api, site: Sites, device: dict, nb_ubiquity: dict, tenant, ctx: AppContext):
+def process_cables(unifi: Unifi, nb: pynetbox.api, site: Sites, device: UniFiDevice, nb_ubiquity: dict, tenant, ctx: AppContext):
     """Process cables and add them to NetBox."""
 
     # 1. Check if device alread exists in Netbox, based on MAC
@@ -31,13 +32,12 @@ def process_cables(unifi: Unifi, nb: pynetbox.api, site: Sites, device: dict, nb
         client_devices: list[dict] = unifi_site.client_device.all()
         unifi_site.device
         logger.warning(f"Find devices in {len(client_devices)}")
-        import json
-        with open("client_devices.json", "w") as f:
-            json.dump(client_devices, f, indent=4)
 
-        for port in device.get("port_table", []):
-            logger.warning(f"last_connection: {port.get('last_connection')}")
-            device_b = nb.dcim.devices.get(site_id=site.id, mac_address=port.get("last_connection").get("mac"))
+        for port in device['port_table']:
+            logger.warning(f"last_connection: {port['last_connection']}")
+            last_conn = port.get("last_connection")
+            if last_conn:
+                device_b = nb.dcim.devices.get(site_id=site.id, mac_address=last_conn.get("mac"))
 
             if not device_b:
                 pass

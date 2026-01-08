@@ -6,7 +6,6 @@ from unifi.sites import Sites
 from unifi.unifi import Unifi
 from util import get_postable_fields
 from context import AppContext
-from processing.cables import process_cables
 
 
 def process_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext):
@@ -82,8 +81,6 @@ def process_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext):
                         except pynetbox.core.query.RequestError as e:
                             logger.exception(f"Failed to create interface template for {device['name']} at site {site}: {e}")
 
-        if nb_device_role == ctx.lan_role:
-            process_cables(unifi, ctx.nb, site, device, ctx.nb_ubiquity, ctx.tenant, ctx)
         # Check for existing device
         logger.debug(f"Checking if device already exists: {device['name']} (serial: {device['serial']})")
         if ctx.nb.dcim.devices.get(site_id=site.id, serial=device["serial"]):

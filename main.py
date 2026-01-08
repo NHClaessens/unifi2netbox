@@ -24,7 +24,13 @@ def add_ip_to_device(ip: str, device_id: int, nb: pynetbox.api):
     })
 
 
-
+# Structure:
+# 1. Get all UniFi controllers
+# 2. Process all controllers in parallel
+#   3. For each controller, process all sites in parallel
+#      4. For each site, process all devices in parallel
+#      5. For each device, process all client devices in parallel
+#      6. For each device, process all cables/connections in parallel (done afterwards so devices will exist in NetBox)
 
 
 if __name__ == "__main__":
