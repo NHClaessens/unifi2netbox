@@ -1,3 +1,4 @@
+import json
 from dotenv import load_dotenv
 from slugify import slugify
 import os
@@ -7,12 +8,12 @@ import warnings
 import logging
 import pynetbox 
 import ipaddress
-import yaml
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib3.exceptions import InsecureRequestWarning
 # Import the unifi module instead of defining the Unifi class
 from unifi.sites import Sites
 from unifi.unifi import Unifi
+from util import get_unifi_site_name, load_config, match_sites_to_netbox, prepare_netbox_sites, setup_logging
 # Suppress only the InsecureRequestWarning
 warnings.simplefilter("ignore", InsecureRequestWarning)
 
@@ -24,6 +25,15 @@ MAX_CONTROLLER_THREADS = 5  # Number of UniFi controllers to process concurrentl
 MAX_SITE_THREADS = 8  # Number of sites to process concurrently per controller
 MAX_DEVICE_THREADS = 8  # Number of devices to process concurrently per site
 MAX_THREADS = 8 # Define threads based on available system cores or default
+
+def add_ip_to_device(ip: str, device_id: int, nb: pynetbox.api):
+    """
+    Add an IP address to a device in NetBox.
+    """
+    nb.ipam.ip_addresses.create({
+        "address": ip,
+        "device": device_id,
+    })
 
 def get_postable_fields(base_url, token, url_path):
     """
@@ -43,178 +53,60 @@ def get_postable_fields(base_url, token, url_path):
     logger.debug(f"Retrieved {len(fields)} POST-able fields from NetBox API")
     return fields
 
-def load_site_mapping(config=None):
-    """
-    Load site mapping from configuration or YAML file.
-    Returns a dictionary mapping UniFi site names to NetBox site names.
-    
-    :param config: Configuration dictionary loaded from config.yaml
-    :return: Dictionary mapping UniFi site names to NetBox site names
-    """
-    # Initialize with empty mapping
-    site_mapping = {}
-    
-    # First check if config has site mappings defined directly
-    if config and 'UNIFI' in config and 'SITE_MAPPINGS' in config['UNIFI']:
-        logger.debug("Loading site mappings from config.yaml")
-        config_mappings = config['UNIFI']['SITE_MAPPINGS']
-        if config_mappings:
-            site_mapping.update(config_mappings)
-            logger.debug(f"Loaded {len(config_mappings)} site mappings from config.yaml")
-    
-    # Check if we should use the external mapping file
-    use_file_mapping = False
-    if config and 'UNIFI' in config and 'USE_SITE_MAPPING' in config['UNIFI']:
-        use_file_mapping = config['UNIFI']['USE_SITE_MAPPING']
-        
-    if use_file_mapping:
-        site_mapping_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config', 'site_mapping.yaml')
-        logger.debug(f"Loading site mapping from file: {site_mapping_path}")
-        
-        # Check if file exists, if not create a default one
-        if not os.path.exists(site_mapping_path):
-            logger.warning(f"Site mapping file not found at {site_mapping_path}. Creating a default one.")
-            os.makedirs(os.path.dirname(site_mapping_path), exist_ok=True)
-            with open(site_mapping_path, 'w') as f:
-                f.write("# Site mapping configuration\n")
-                f.write("# Format: unifi_site_name: netbox_site_name\n")
-                f.write("\"Default\": \"Default\"\n")
+
+def process_cables(unifi: Unifi, nb: pynetbox.api, site: Sites, device: dict, nb_ubiquity: dict, tenant):
+    """Process cables and add them to NetBox."""
+
+    # 1. Check if device alread exists in Netbox, based on MAC
+    # 2. If device does not exist, fetch data from UniFi and create device in Netbox
+    #   a. Create an interface object for the device
+    #   b. Create an IP address object for the device
+    #   c. Create a MAC address object for the device
+    #   d. Assign it the "Wired"role
+    # 3. If device exists, see if a cable already exists to this MAC address
+    #   a. If cable exists, check if the cable is correct, if not, update the cable
+    #   b. If it does not, create a cable object
+
+
+    try:
+        logger.info(f"Processing cables for device {device['name']} at site {site}...")
+        logger.debug(f"Cables details: {device.get('port_table')}")
+        logger.warning(f"Fetching devices from UniFi site: {site.name}")
+
+        unifi_site_name = get_unifi_site_name(site.name, config)
+        unifi_site = unifi.site(unifi_site_name)
+
+        client_devices: list[dict] = unifi_site.client_device.all()
+        unifi_site.device
+        logger.warning(f"Find devices in {len(client_devices)}")
+        with open("client_devices.json", "w") as f:
+            json.dump(client_devices, f, indent=4)
+
+
+
+
+        for port in device.get("port_table", []):
+            logger.warning(f"last_connection: {port.get("last_connection")}")
+            device_b = nb.dcim.devices.get(site_id=site.id, mac_address=port.get("last_connection").get("mac"))
+
+            if not device_b:
+                pass
+
+            # nb.dcim.cables.create({
+            #     "a_terminations": {
+            #         "object_type": "dcim.interface",
+            #         "object_id": port.get("a_terminations").get("object_id"),
+            #     },
+            #     "b_terminations": port.get("b_terminations"),
+            #     "status": port.get("status"),
+            # })
             
-        try:
-            with open(site_mapping_path, 'r') as f:
-                file_mapping = yaml.safe_load(f) or {}
-                logger.debug(f"Loaded {len(file_mapping)} mappings from site_mapping.yaml")
-                # Update the mapping with file values (config values take precedence)
-                for key, value in file_mapping.items():
-                    if key not in site_mapping:  # Don't overwrite config mappings
-                        site_mapping[key] = value
-        except Exception as e:
-            logger.error(f"Error loading site mapping file: {e}")
-    
-    logger.debug(f"Final site mapping has {len(site_mapping)} entries")
-    return site_mapping
+    except Exception as e:
+        logger.exception(f"Failed to process cables for device {device['name']} at site {site}: {e}")
 
-def get_netbox_site_name(unifi_site_name, config=None):
-    """
-    Get NetBox site name from UniFi site name using the mapping table.
-    If no mapping exists, return the original name.
-    
-    :param unifi_site_name: The UniFi site name to look up
-    :param config: Configuration dictionary loaded from config.yaml
-    :return: The corresponding NetBox site name or the original name if no mapping exists
-    """
-    site_mapping = load_site_mapping(config)
-    mapped_name = site_mapping.get(unifi_site_name, unifi_site_name)
-    if mapped_name != unifi_site_name:
-        logger.debug(f"Mapped UniFi site '{unifi_site_name}' to NetBox site '{mapped_name}'")
-    return mapped_name
-
-def prepare_netbox_sites(netbox_sites):
-    """
-    Pre-process NetBox sites for lookup.
-
-    :param netbox_sites: List of NetBox site objects.
-    :return: A dictionary mapping NetBox site names to the original NetBox site objects.
-    """
-    netbox_sites_dict = {}
-    for netbox_site in netbox_sites:
-        netbox_sites_dict[netbox_site.name] = netbox_site
-    return netbox_sites_dict
-
-def match_sites_to_netbox(ubiquity_desc, netbox_sites_dict, config=None):
-    """
-    Match Ubiquity site to NetBox site using the site mapping configuration.
-
-    :param ubiquity_desc: The description of the Ubiquity site.
-    :param netbox_sites_dict: A dictionary mapping NetBox site names to site objects.
-    :param config: Configuration dictionary loaded from config.yaml
-    :return: The matched NetBox site, or None if no match is found.
-    """
-    # Get the corresponding NetBox site name from the mapping
-    netbox_site_name = get_netbox_site_name(ubiquity_desc, config)
-    logger.debug(f'Mapping Ubiquity site: "{ubiquity_desc}" -> "{netbox_site_name}"')
-    
-    # Look for exact match in NetBox sites
-    if netbox_site_name in netbox_sites_dict:
-        netbox_site = netbox_sites_dict[netbox_site_name]
-        logger.debug(f'Matched Ubiquity site "{ubiquity_desc}" to NetBox site "{netbox_site.name}"')
-        return netbox_site
-    
-    # If site mapping is enabled but no match found, provide more helpful message
-    if config and 'UNIFI' in config and ('USE_SITE_MAPPING' in config['UNIFI'] and config['UNIFI']['USE_SITE_MAPPING'] or 
-                                        'SITE_MAPPINGS' in config['UNIFI'] and config['UNIFI']['SITE_MAPPINGS']):
-        logger.debug(f'No match found for Ubiquity site "{ubiquity_desc}". Add mapping in config.yaml or site_mapping.yaml.')
-    else:
-        logger.debug(f'No match found for Ubiquity site "{ubiquity_desc}". Enable site mapping in config.yaml if needed.')
-    return None
-
-def setup_logging(min_log_level=logging.INFO):
-    """
-    Sets up logging to separate files for each log level.
-    Only logs from the specified `min_log_level` and above are saved in their respective files.
-    Includes console logging for the same log levels.
-
-    :param min_log_level: Minimum log level to log. Defaults to logging.INFO.
-    """
-    logs_dir = "logs"
-    if not os.path.exists(logs_dir):
-        os.makedirs(logs_dir)
-
-    if not os.access(logs_dir, os.W_OK):
-        raise PermissionError(f"Cannot write to log directory: {logs_dir}")
-
-    # Log files for each level
-    log_levels = {
-        "DEBUG": logging.DEBUG,
-        "INFO": logging.INFO,
-        "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL
-    }
-
-    # Create the root logger
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)  # Capture all log levels
-
-    # Define a log format
-    log_format = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-
-    # Set up file handlers for each log level
-    for level_name, level_value in log_levels.items():
-        if level_value >= min_log_level:
-            log_file = os.path.join(logs_dir, f"{level_name.lower()}.log")
-            handler = logging.FileHandler(log_file)
-            handler.setLevel(level_value)
-            handler.setFormatter(log_format)
-
-            # Add a filter so only logs of this specific level are captured
-            handler.addFilter(lambda record, lv=level_value: record.levelno == lv)
-            logger.addHandler(handler)
-
-    # Set up console handler for logs at `min_log_level` and above
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(min_log_level)
-    console_handler.setFormatter(log_format)
-    logger.addHandler(console_handler)
-
-    logging.info(f"Logging is set up. Minimum log level: {logging.getLevelName(min_log_level)}")
-
-def load_config(config_path: str = "config/config.yaml") -> dict:
-    """
-    Reads the configuration from a YAML file.
-
-    :param config_path: Path to the YAML configuration file.
-    :return: A dictionary of the configuration.
-    """
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
-
-    with open(config_path, "r") as file:
-        try:
-            config = yaml.safe_load(file)  # Use safe_load to avoid executing malicious YAML code
-            return config
-        except yaml.YAMLError as e:
-            raise Exception(f"Error reading configuration file: {e}")
+def process_mac_addresses(unifi: Unifi, nb: pynetbox.api, site: Sites, device: dict, nb_ubiquity: dict, tenant):
+    """Process MAC addresses and add them to NetBox."""
+    # 1. 
 
 def process_device(unifi: Unifi, nb: pynetbox.api, site: Sites, device: dict, nb_ubiquity: dict, tenant):
     """Process a device and add it to NetBox."""
@@ -289,13 +181,15 @@ def process_device(unifi: Unifi, nb: pynetbox.api, site: Sites, device: dict, nb
                         except pynetbox.core.query.RequestError as e:
                             logger.exception(f"Failed to create interface template for {device['name']} at site {site}: {e}")
 
+        if nb_device_role == lan_role:
+            process_cables(unifi, nb, site, device, nb_ubiquity, tenant)
         # Check for existing device
         logger.debug(f"Checking if device already exists: {device['name']} (serial: {device['serial']})")
         if nb.dcim.devices.get(site_id=site.id, serial=device["serial"]):
             logger.info(f"Device {device['name']} with serial {device['serial']} already exists. Skipping...")
             return
 
-        logger.warning(f"Postable fields: {get_postable_fields(netbox_url, netbox_token, 'dcim/devices')}")
+
 
         # Create NetBox Device
         try:
@@ -400,6 +294,9 @@ def process_device(unifi: Unifi, nb: pynetbox.api, site: Sites, device: dict, nb
                 nb_device.save()
                 logger.info(f"Device {device['name']} with IP {ip} added to NetBox.")
 
+
+
+
     except Exception as e:
         logger.exception(f"Failed to process device {device['name']} at site {site}: {e}")
 
@@ -422,6 +319,19 @@ def process_site(unifi: Unifi, nb, site_name: str, nb_site: Sites, nb_ubiquity, 
                     # TODO: VRF creation will happen multiple times as devices are processed in parallel
                     # Deleting all but one manually is a stopgap solution
                     futures.append(executor.submit(process_device, unifi, nb, nb_site, device, nb_ubiquity, tenant))
+
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        logger.error(f"Error processing a device at site {site_name}: {e}")
+
+            client_devices: list[dict] = site.client_device.all()
+            with ThreadPoolExecutor(max_workers=MAX_DEVICE_THREADS) as executor:
+                futures = []
+                # for client_device in client_devices:
+                #    TODO: Process client devices
+                # futures.append(executor.submit(process_device, unifi, nb, nb_site, device, nb_ubiquity, tenant))
 
                 for future in as_completed(futures):
                     try:

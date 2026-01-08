@@ -1,5 +1,6 @@
-from icecream import ic
 import logging
+
+from .clientdevice import ClientDevice
 from .portconf import PortConf
 from .device import Device
 from .radiusprofile import RadiusProfile
@@ -32,7 +33,8 @@ class Sites:
         self.wlan_conf = WlanConf(self.unifi, self)
         self.user_group = UserGroup(self.unifi, self)
         self.ap_groups = ApGroups(self.unifi, self)
-
+        self.client_device = ClientDevice(self.unifi, self)
+        
     def __str__(self):
         return f"{self.__class__.__name__}: {self.desc}"
 

@@ -5,3 +5,4 @@ logs/*
 config/config.yaml
 config.yaml
 unifi/__pycache__/*
+example_data/*
