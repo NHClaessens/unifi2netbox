@@ -1,5 +1,8 @@
 import logging
-from main import logger
+import re
+
+import requests
+from logger import logger
 import yaml
 import os
 
@@ -186,3 +189,53 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
             return config
         except yaml.YAMLError as e:
             raise Exception(f"Error reading configuration file: {e}")
+
+def get_postable_fields(base_url, token, url_path):
+    """
+    Retrieves the POST-able fields for NetBox path.
+    """
+    url = f"{base_url}/api/{url_path}/"
+    logger.debug(f"Retrieving POST-able fields from NetBox API: {url}")
+    headers = {
+        "Authorization": f"Token {token}",
+        "Content-Type": "application/json",
+    }
+    response = requests.options(url, headers=headers, verify=False)
+    response.raise_for_status()  # Raise an error if the response is not successful
+
+    # Extract the available POST fields from the API schema
+    fields = response.json().get("actions", {}).get("POST", {})
+    logger.debug(f"Retrieved {len(fields)} POST-able fields from NetBox API")
+    return fields
+
+def parse_successful_log_entries(log_file):
+    """
+    Parses a log file to find entries containing 'successfully added to NetBox'
+    and builds a dictionary with 'device' and 'ip address' lists of IDs.
+
+    :param log_file: Path to the log file
+    :return: Dictionary with lists of IDs for 'device' and 'ip address'
+    """
+    # Dictionary to store the resulting lists
+    result = {
+        "device": [],
+        "ip address": []
+    }
+
+    # Regular expression to extract the ID from the log entry
+    id_pattern_device = re.compile(r"^Device .* with ID (\d+) successfully added to NetBox")
+    id_pattern_ip = re.compile(r"^IP address .* with ID (\d+) successfully added to NetBox")
+
+    with open(log_file, "r") as file:
+        for line in file:
+            # Start processing the log entry only after `INFO -`
+            if "INFO - " in line:
+                log_content = line.split("INFO - ", 1)[1]  # Extract the part after "INFO - "
+
+                # Match and classify the log entry
+                if match := id_pattern_device.match(log_content):
+                    result["device"].append(int(match.group(1)))  # Extract and add device ID
+                elif match := id_pattern_ip.match(log_content):
+                    result["ip address"].append(int(match.group(1)))  # Extract and add IP address ID
+
+    return result

@@ -6,3 +6,5 @@ config/config.yaml
 config.yaml
 unifi/__pycache__/*
 example_data/*
+*/__pycache__/*
+__pycache__/*
