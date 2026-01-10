@@ -4,6 +4,7 @@ Type definitions for UniFi and NetBox API dictionaries.
 These TypedDict classes define the structure of dictionaries returned by the APIs,
 similar to TypeScript interfaces. They provide type hints without requiring class instantiation.
 """
+from enum import StrEnum
 from typing import TypedDict, List, Optional
 
 
@@ -141,4 +142,6 @@ class NetBoxIPAddressData(TypedDict, total=False):
     vrf_id: int
     tenant_id: int
     status: str
-
+class Roles(StrEnum):
+    WIRELESS = 'WIRELESS'
+    LAN = 'LAN'

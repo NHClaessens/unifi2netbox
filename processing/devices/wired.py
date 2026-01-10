@@ -1,4 +1,5 @@
 """Process wired network devices (switches, routers)."""
+from custom_types import Roles
 from logger import logger
 from unifi.sites import Sites
 from unifi.unifi import Unifi
@@ -20,7 +21,7 @@ def process_wired_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContex
     """
     try:
         # Wired devices use the LAN role
-        nb_device = process_base_device(unifi, site, device, ctx, ctx.lan_role, vrf)
+        nb_device = process_base_device(unifi, site, device, ctx, ctx.roles[Roles.LAN], vrf)
         
         if nb_device:
             logger.info(f"Successfully processed wired device {device['name']} at site {site}.")

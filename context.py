@@ -6,6 +6,8 @@ from typing import Any
 import pynetbox
 from pynetbox.core.api import Record
 
+from custom_types import Roles
+
 
 @dataclass
 class AppContext:
@@ -13,8 +15,7 @@ class AppContext:
     nb: pynetbox.api
     nb_ubiquity: list[Record | Any] | Record | Any
     tenant: Any
-    lan_role: Any
-    wireless_role: Any
+    roles: dict[Roles, pynetbox.core.response.Record | None]
     netbox_url: str
     netbox_token: str
     config: dict

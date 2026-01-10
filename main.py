@@ -5,7 +5,7 @@ import warnings
 import logging
 import pynetbox 
 from urllib3.exceptions import InsecureRequestWarning
-from util import load_config, prepare_netbox_sites, setup_logging
+from util import get_or_create_roles, load_config, prepare_netbox_sites, setup_logging
 from processing import process_all_controllers
 from logger import logger
 from context import AppContext
@@ -102,28 +102,6 @@ if __name__ == "__main__":
 
     tenant = nb.tenancy.tenants.get(name=tenant_name)
 
-    try:
-        wireless_role_name = config['NETBOX']['ROLES']['WIRELESS']
-    except KeyError:
-        logger.exception("Netbox wireless role is missing from configuration.")
-        raise SystemExit(1)
-    try:
-        lan_role_name = config['NETBOX']['ROLES']['LAN']
-    except KeyError:
-        logger.exception("Netbox lan role is missing from configuration.")
-        raise SystemExit(1)
-
-    wireless_role = nb.dcim.device_roles.get(slug=wireless_role_name.lower())
-    lan_role = nb.dcim.device_roles.get(slug=lan_role_name.lower())
-    if not wireless_role:
-        wireless_role = nb.dcim.device_roles.create({'name': wireless_role_name, 'slug': wireless_role_name.lower()})
-        if wireless_role:
-            logger.info(f"Wireless role {wireless_role_name} with ID {wireless_role.id} successfully added to Netbox.")
-    if not lan_role:
-        lan_role = nb.dcim.device_roles.create({'name': lan_role_name, 'slug': lan_role_name.lower()})
-        if lan_role:
-            logger.info(f"LAN role {lan_role_name} with ID {lan_role.id} successfully added to Netbox.")
-
     logger.debug("Fetching all NetBox sites")
     netbox_sites = nb.dcim.sites.all()
     logger.debug(f"Found {len(netbox_sites)} sites in NetBox")
@@ -143,8 +121,7 @@ if __name__ == "__main__":
         nb=nb,
         nb_ubiquity=nb_ubiquity,
         tenant=tenant,
-        lan_role=lan_role,
-        wireless_role=wireless_role,
+        roles=get_or_create_roles(nb, config),
         netbox_url=netbox_url,
         netbox_token=netbox_token,
         config=config

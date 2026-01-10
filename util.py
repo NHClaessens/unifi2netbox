@@ -1,7 +1,9 @@
 import logging
 import re
 
+import pynetbox
 import requests
+from custom_types import Roles
 from logger import logger
 import yaml
 import os
@@ -239,3 +241,29 @@ def parse_successful_log_entries(log_file):
                     result["ip address"].append(int(match.group(1)))  # Extract and add IP address ID
 
     return result
+
+def get_role_from_config(config, role_name):
+    """
+    Get a role from the configuration.
+    """
+    role = config['NETBOX']['ROLES'][role_name]
+    if not role:
+        raise Exception(f"Role {role_name} not found in configuration.")
+    return role
+
+def get_or_create_role(nb, role_name):
+    role = nb.dcim.device_roles.get(slug=role_name.lower())
+    if not role :
+        role = nb.dcim.device_roles.create({'name': role_name, 'slug': role_name.lower()})
+        if role:
+            logger.info(f"Role {role_name} with ID {role.id} successfully added to Netbox.")
+    return role
+
+def get_or_create_roles(nb, config):
+    roles: dict[Roles, pynetbox.core.response.Record] = {}
+    for config_role_name in Roles:
+        role_name = get_role_from_config(config, config_role_name)
+        if role_name:
+            role = get_or_create_role(nb, role_name)
+            roles[config_role_name] = role
+    return roles

@@ -1,5 +1,6 @@
 """Process wireless network devices (access points)."""
 import pynetbox
+from custom_types import Roles
 from logger import logger
 from unifi.sites import Sites
 from unifi.unifi import Unifi
@@ -23,7 +24,7 @@ def process_wireless_device(unifi: Unifi, site: Sites, device: dict, ctx: AppCon
     """
     try:
         # Wireless devices use the wireless role
-        nb_device = process_base_device(unifi, site, device, ctx, ctx.wireless_role, vrf)
+        nb_device = process_base_device(unifi, site, device, ctx, ctx.roles[Roles.WIRELESS], vrf)
         
         if nb_device:
             logger.info(f"Successfully processed wireless device {device['name']} at site {site}.")
