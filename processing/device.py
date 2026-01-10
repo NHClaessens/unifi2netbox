@@ -4,9 +4,10 @@ from unifi.sites import Sites
 from unifi.unifi import Unifi
 from context import AppContext
 from processing.devices import process_wired_device, process_wireless_device, process_client_device
+import pynetbox
 
 
-def process_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext):
+def process_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext, vrf: pynetbox.core.response.Record):
     """
     Route device processing to the appropriate handler based on device type.
     
@@ -22,10 +23,10 @@ def process_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext):
         
         if is_access_point:
             # Process as wireless device (access point)
-            process_wireless_device(unifi, site, device, ctx)
+            process_wireless_device(unifi, site, device, ctx, vrf)
         else:
             # Process as wired device (switch, router, etc.)
-            process_wired_device(unifi, site, device, ctx)
+            process_wired_device(unifi, site, device, ctx, vrf)
             
     except Exception as e:
         logger.exception(f"Failed to route device {device.get('name')} at site {site}: {e}")

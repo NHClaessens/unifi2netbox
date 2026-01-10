@@ -90,7 +90,7 @@ def create_netbox_device(device: dict, device_type_id: int, device_role_id: int,
 
 
 def process_base_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext, 
-                       device_role) -> pynetbox.core.response.Record | None:
+                       device_role, vrf: pynetbox.core.response.Record) -> pynetbox.core.response.Record | None:
     """
     Base device processing logic shared by wired and wireless devices.
     
@@ -109,12 +109,6 @@ def process_base_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext
 
     if not device.get("serial"):
         logger.warning(f"Missing serial number for device {device.get('name')}. Skipping...")
-        return None
-
-    # Get or create VRF
-    vrf = get_or_create_vrf(site, ctx)
-    if not vrf:
-        logger.error(f"Failed to get or create VRF for site {site}. Skipping device {device['name']}.")
         return None
 
     # Get or create device type

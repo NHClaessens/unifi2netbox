@@ -1,6 +1,7 @@
 """Process sites and their devices."""
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from logger import logger
+from processing.common import get_or_create_vrf
 from unifi.sites import Sites
 from unifi.unifi import Unifi
 from util import match_sites_to_netbox
@@ -44,12 +45,18 @@ def process_site(unifi: Unifi, site_name: str, nb_site: Sites, ctx: AppContext):
             devices: list[dict] = site.device.all()
             logger.debug(f"Found {len(devices)} devices for site {site_name}")
 
+            # Create VRF for site
+            vrf = get_or_create_vrf(nb_site, ctx)
+            if not vrf:
+                logger.error(f"Failed to get or create VRF for site {site_name}. Skipping site.")
+                return
+
             with ThreadPoolExecutor(max_workers=MAX_DEVICE_THREADS) as executor:
                 futures = []
                 for device in devices:
                     # TODO: VRF creation will happen multiple times as devices are processed in parallel
                     # Deleting all but one manually is a stopgap solution
-                    futures.append(executor.submit(process_device, unifi, nb_site, device, ctx))
+                    futures.append(executor.submit(process_device, unifi, nb_site, device, ctx, vrf))
 
                 for future in as_completed(futures):
                     try:

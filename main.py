@@ -32,6 +32,10 @@ def add_ip_to_device(ip: str, device_id: int, nb: pynetbox.api):
 #      5. For each device, process all client devices in parallel
 #      6. For each device, process all cables/connections in parallel (done afterwards so devices will exist in NetBox)
 
+# TODO:
+# - Add a way to delete devices from NetBox if they are not in UniFi
+# - Perhaps add a list of devices to config, to then ssh into to get interfaces and IPs
+# - When configuring cables, check if the target port is connected to a patch panel, and if so, use the patch panel's interface to create the cable
 
 if __name__ == "__main__":
     # Parse command line arguments

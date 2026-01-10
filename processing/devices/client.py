@@ -3,12 +3,6 @@ from logger import logger
 from unifi.sites import Sites
 from unifi.unifi import Unifi
 from context import AppContext
-from processing.common import (
-    get_or_create_vrf,
-    add_mac_address_to_interface,
-)
-import pynetbox
-
 
 def process_client_device(unifi: Unifi, site: Sites, client: dict, ctx: AppContext):
     """

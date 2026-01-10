@@ -1,4 +1,5 @@
 """Process wireless network devices (access points)."""
+import pynetbox
 from logger import logger
 from unifi.sites import Sites
 from unifi.unifi import Unifi
@@ -6,7 +7,7 @@ from context import AppContext
 from processing.devices.base import process_base_device
 
 
-def process_wireless_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext):
+def process_wireless_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext, vrf: pynetbox.core.response.Record):
     """
     Process a wireless network device (access point) and add it to NetBox.
     
@@ -18,10 +19,11 @@ def process_wireless_device(unifi: Unifi, site: Sites, device: dict, ctx: AppCon
         site: NetBox site object
         device: UniFi device dictionary
         ctx: Application context
+        vrf: VRF record
     """
     try:
         # Wireless devices use the wireless role
-        nb_device = process_base_device(unifi, site, device, ctx, ctx.wireless_role)
+        nb_device = process_base_device(unifi, site, device, ctx, ctx.wireless_role, vrf)
         
         if nb_device:
             logger.info(f"Successfully processed wireless device {device['name']} at site {site}.")
