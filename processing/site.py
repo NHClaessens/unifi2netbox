@@ -1,5 +1,6 @@
 """Process sites and their devices."""
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from custom_types import Roles
 from logger import logger
 from processing.common import get_or_create_vrf
 from unifi.sites import Sites
@@ -64,12 +65,17 @@ def process_site(unifi: Unifi, site_name: str, nb_site: Sites, ctx: AppContext):
                     except Exception as e:
                         logger.error(f"Error processing a device at site {site_name}: {e}")
 
+
+            if Roles.CLIENT_WIRED not in ctx.roles and Roles.CLIENT_WIRELESS not in ctx.roles:
+                logger.info(f"No client roles found in configuration. Skipping client device processing for site {site_name}.")
+                return
+
             client_devices: list[dict] = site.client_device.all()
             logger.debug(f"Found {len(client_devices)} client devices for site {site_name}")
             with ThreadPoolExecutor(max_workers=MAX_DEVICE_THREADS) as executor:
                 futures = []
                 for client_device in client_devices:
-                    futures.append(executor.submit(process_client, unifi, nb_site, client_device, ctx))
+                    futures.append(executor.submit(process_client, unifi, nb_site, client_device, ctx, vrf))
 
                 for future in as_completed(futures):
                     try:

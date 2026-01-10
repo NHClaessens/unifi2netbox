@@ -88,8 +88,14 @@ def create_netbox_device(device: dict, device_type_id: int, device_role_id: int,
     return None
 
 
-def process_base_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext, 
-                       device_role, vrf: pynetbox.core.response.Record) -> pynetbox.core.response.Record | None:
+def process_base_device(
+    unifi: Unifi, 
+    site: Sites, 
+    device: dict, 
+    ctx: AppContext, 
+    device_role, 
+    vrf: pynetbox.core.response.Record
+    ) -> pynetbox.core.response.Record | None:
     """
     Base device processing logic shared by wired and wireless devices.
     
@@ -128,7 +134,7 @@ def process_base_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext
     # Add MAC address to vlan.1 interface if available
     interface = ctx.nb.dcim.interfaces.get(device_id=nb_device.id, name="vlan.1")
     if interface and device.get("mac"):
-        add_mac_address_to_interface(device["mac"], interface.id, device['name'], ctx)
+        add_mac_address_to_interface(device["mac"], interface, device['name'], ctx, set_as_primary=True)
 
     return nb_device
 

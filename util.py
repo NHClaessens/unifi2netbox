@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 
@@ -209,6 +210,14 @@ def get_postable_fields(base_url, token, url_path):
     fields = response.json().get("actions", {}).get("POST", {})
     logger.debug(f"Retrieved {len(fields)} POST-able fields from NetBox API")
     return fields
+
+def write_postable_fields(base_url, token, url_path):
+    """
+    Writes the POST-able fields for NetBox path to a file.
+    """
+    fields = get_postable_fields(base_url, token, url_path)
+    with open(f"example_data/{url_path.replace('/', '_')}.json", "w") as file:
+        json.dump(fields, file, indent=4)
 
 def parse_successful_log_entries(log_file):
     """

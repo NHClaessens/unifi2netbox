@@ -32,7 +32,7 @@ def process_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContext, vrf
         logger.exception(f"Failed to route device {device.get('name')} at site {site}: {e}")
 
 
-def process_client(unifi: Unifi, site: Sites, client: dict, ctx: AppContext):
+def process_client(unifi: Unifi, site: Sites, client: dict, ctx: AppContext, vrf: pynetbox.core.response.Record):
     """
     Process a client device.
     
@@ -42,4 +42,4 @@ def process_client(unifi: Unifi, site: Sites, client: dict, ctx: AppContext):
         client: UniFi client device dictionary
         ctx: Application context
     """
-    process_client_device(unifi, site, client, ctx)
+    process_client_device(unifi, site, client, ctx, vrf)
