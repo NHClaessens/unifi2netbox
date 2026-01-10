@@ -24,8 +24,6 @@ def process_wired_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContex
         
         if nb_device:
             logger.info(f"Successfully processed wired device {device['name']} at site {site}.")
-        else:
-            logger.warning(f"Failed to process wired device {device['name']} at site {site}.")
             
     except Exception as e:
         logger.exception(f"Failed to process wired device {device.get('name')} at site {site}: {e}")

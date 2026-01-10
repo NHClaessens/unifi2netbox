@@ -38,8 +38,6 @@ def process_wireless_device(unifi: Unifi, site: Sites, device: dict, ctx: AppCon
             if vap_table:
                 logger.debug(f"Device {device['name']} has {len(vap_table)} wireless networks (VAPs)")
                 # Future: Process VAPs here
-        else:
-            logger.warning(f"Failed to process wireless device {device['name']} at site {site}.")
             
     except Exception as e:
         logger.exception(f"Failed to process wireless device {device.get('name')} at site {site}: {e}")
