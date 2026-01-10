@@ -142,6 +142,9 @@ class NetBoxIPAddressData(TypedDict, total=False):
     vrf_id: int
     tenant_id: int
     status: str
+
 class Roles(StrEnum):
     WIRELESS = 'WIRELESS'
     LAN = 'LAN'
+    CLIENT_WIRED = 'CLIENT_WIRED'
+    CLIENT_WIRELESS = 'CLIENT_WIRELESS'

@@ -242,16 +242,19 @@ def parse_successful_log_entries(log_file):
 
     return result
 
-def get_role_from_config(config, role_name):
+def get_role_from_config(config: dict, role_name: Roles) -> str | None:
     """
     Get a role from the configuration.
     """
-    role = config['NETBOX']['ROLES'][role_name]
+    role = config['NETBOX']['ROLES'].get(role_name)
     if not role:
+        if role_name.startswith('CLIENT_'):
+            logger.warning(f"Client role {role_name} not found in configuration. Devices with this role will be skipped.")
+            return None
         raise Exception(f"Role {role_name} not found in configuration.")
     return role
 
-def get_or_create_role(nb, role_name):
+def get_or_create_role(nb: pynetbox.api, role_name: str):
     role = nb.dcim.device_roles.get(slug=role_name.lower())
     if not role :
         role = nb.dcim.device_roles.create({'name': role_name, 'slug': role_name.lower()})
@@ -259,7 +262,7 @@ def get_or_create_role(nb, role_name):
             logger.info(f"Role {role_name} with ID {role.id} successfully added to Netbox.")
     return role
 
-def get_or_create_roles(nb, config):
+def get_or_create_roles(nb: pynetbox.api, config: dict):
     roles: dict[Roles, pynetbox.core.response.Record] = {}
     for config_role_name in Roles:
         role_name = get_role_from_config(config, config_role_name)
