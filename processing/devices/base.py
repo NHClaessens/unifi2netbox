@@ -7,7 +7,6 @@ from util import get_postable_fields
 import pynetbox
 from processing.common import (
     get_or_create_device_type,
-    create_interface_templates,
     add_primary_ip_to_device,
     add_mac_address_to_interface,
 )
@@ -119,9 +118,6 @@ def process_base_device(
     nb_device_type = get_or_create_device_type(device, ctx)
     if not nb_device_type:
         raise Exception(f"Failed to get or create device type for {device['name']}. Skipping...")
-
-    # Create interface templates if port_table exists
-    create_interface_templates(device, nb_device_type.id, ctx)
 
     # Create NetBox device
     nb_device = create_netbox_device(device, nb_device_type.id, device_role.id, site, ctx)

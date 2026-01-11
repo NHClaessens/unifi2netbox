@@ -35,6 +35,8 @@ def get_or_create_device_type(device: dict, ctx: AppContext) -> pynetbox.core.re
             logger.error(f"Failed to create device type for {device['name']}: {e}")
             return None
     
+        create_interface_templates(device, nb_device_type.id, ctx)
+    
     return nb_device_type
 
 
@@ -50,7 +52,6 @@ def create_interface_templates(device: dict, device_type_id: int, ctx: AppContex
     port_table = device.get("port_table", [])
     ethernet_table = device.get("ethernet_table", [])
     exising_templates = ctx.nb.dcim.interface_templates.filter(device_type=device_type_id)
-    logger.warning(f"Ethernet table for device {device['name']}: {ethernet_table}, port table len: {len(port_table)}, template exists: {len(exising_templates)}")
     if exising_templates:
         logger.debug(f"Interface templates for device {device['name']} already exist. Deleting...")
         delete_success = exising_templates.delete()
@@ -63,7 +64,8 @@ def create_interface_templates(device: dict, device_type_id: int, ctx: AppContex
         logger.debug(f"Port table for device {device['name']}: {len(port_table)} ports")
         for port in port_table:
             port_type = SPEED_MAP.get(port.get("media"))
-            if port_type:
+            template = ctx.nb.dcim.interface_templates.get(device_type=device_type_id, name=port["name"])
+            if port_type and not template:
                 try:
                     template = ctx.nb.dcim.interface_templates.create({
                         "device_type": device_type_id,
