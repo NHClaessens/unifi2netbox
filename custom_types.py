@@ -148,3 +148,21 @@ class Roles(StrEnum):
     LAN = 'LAN'
     CLIENT_WIRED = 'CLIENT_WIRED'
     CLIENT_WIRELESS = 'CLIENT_WIRELESS'
+
+SPEED_MAP = {
+    "GE": "1000base-t",
+    "2P5GE": "2.5gbase-t",
+}
+
+MAX_SPEED_MAP = {
+    1000: "1000base-t",
+    2500: "2.5gbase-t",
+    5000: "5gbase-t",
+    10000: "10gbase-t",
+    25000: "25gbase-t",
+    50000: "50gbase-t",
+    100000: "100gbase-t",
+    250000: "250gbase-t",
+    500000: "500gbase-t",
+    1000000: "1000gbase-t",
+}

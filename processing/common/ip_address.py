@@ -98,7 +98,7 @@ def add_primary_ip_to_device(device: dict, nb_device: pynetbox.core.response.Rec
     return False
 
 
-def add_ip_address_to_interface(ip: str, interface_id: int, vrf: pynetbox.core.response.Record, device_name: str, ctx: AppContext) -> bool:
+def add_ip_address_to_interface(ip: str, interface: pynetbox.core.response.Record, vrf: pynetbox.core.response.Record, device_name: str, ctx: AppContext, set_as_primary: bool = False) -> bool:
     """
     Add IP address to an interface in NetBox.
     
@@ -123,7 +123,7 @@ def add_ip_address_to_interface(ip: str, interface_id: int, vrf: pynetbox.core.r
     if not nb_ip:
         try:
             nb_ip = ctx.nb.ipam.ip_addresses.create({
-                "assigned_object_id": interface_id,
+                "assigned_object_id": interface.id,
                 "assigned_object_type": 'dcim.interface',
                 "address": ip,
                 "vrf_id": vrf.id,
@@ -132,6 +132,10 @@ def add_ip_address_to_interface(ip: str, interface_id: int, vrf: pynetbox.core.r
             })
             if nb_ip:
                 logger.info(f"IP address {ip} with ID {nb_ip.id} successfully added to NetBox.")
+                if set_as_primary:
+                    interface.primary_ip4 = nb_ip.id
+                    interface.save()
+                    logger.info(f"IP address {ip} with ID {nb_ip.id} set as primary IP address for device {device_name}.")
                 return True
         except pynetbox.core.query.RequestError as e:
             logger.exception(f"Failed to create IP address {ip} for device {device_name}: {e}")

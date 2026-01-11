@@ -1,4 +1,5 @@
 """Device type operations."""
+from custom_types import SPEED_MAP
 from logger import logger
 from context import AppContext
 import pynetbox
@@ -49,14 +50,11 @@ def create_interface_templates(device: dict, device_type_id: int, ctx: AppContex
         return
     
     port_table = device.get("port_table", [])
+    ethernet_table = device.get("ethernet_table", [])
     if len(port_table) > 0:
         logger.debug(f"Port table for device {device['name']}: {len(port_table)} ports")
         for port in port_table:
             # Choices can be found here: https://github.com/netbox-community/netbox/blob/main/netbox/dcim/choices.py
-            SPEED_MAP = {
-                "GE": "1000base-t",
-                "2P5GE": "2.5gbase-t",
-            }
             port_type = SPEED_MAP.get(port.get("media"))
             if port_type:
                 try:
@@ -69,4 +67,13 @@ def create_interface_templates(device: dict, device_type_id: int, ctx: AppContex
                         logger.info(f"Interface template {port['name']} with ID {template.id} successfully added to NetBox.")
                 except pynetbox.core.query.RequestError as e:
                     logger.exception(f"Failed to create interface template {port['name']} for device {device['name']}: {e}")
-
+    elif len(ethernet_table) > 0:
+        # Use this for APs with single ports, as they do not define a port_table
+        logger.debug(f"Ethernet table for device {device['name']}: {len(ethernet_table)} ports")
+        template = ctx.nb.dcim.interface_templates.create({
+            "device_type": device_type_id,
+            "name": port["name"],
+            "type": "ethernet",
+        })
+        if template:
+            logger.info(f"Interface template {port['name']} with ID {template.id} successfully added to NetBox.")

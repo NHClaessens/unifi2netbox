@@ -275,7 +275,7 @@ def process_wireless_vap(nb_device: pynetbox.core.response.Record, site: Sites, 
         # Add IP address to interface
         ip = vap.get('ip')
         if ip and interface:
-            add_ip_address_to_interface(ip, interface.id, nb_device.name, ctx)
+            add_ip_address_to_interface(ip, interface, vrf, nb_device.name, ctx, set_as_primary=True)
         
     except Exception as e:
         logger.exception(f"Failed to process wireless network {vap.get('name', 'Unknown')} at site {site}: {e}")
