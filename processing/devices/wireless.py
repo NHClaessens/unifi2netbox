@@ -1,14 +1,12 @@
 """Process wireless network devices (access points)."""
 import pynetbox
-from custom_types import Roles
+from custom_types import RADIO_TYPE_MAP, Roles
 from logger import logger
-from processing.common.ip_address import add_ip_address_to_interface
 from unifi.sites import Sites
 from unifi.unifi import Unifi
 from context import AppContext
 from processing.devices.base import process_base_device
 from processing.common.mac_address import add_mac_address_to_interface
-from util import write_postable_fields
 
 
 def format_rf_channel(radio: str, channel: int) -> str:
@@ -179,103 +177,116 @@ def process_wireless_vap(nb_device: pynetbox.core.response.Record, site: Sites, 
         
         logger.info(f"Processing wireless network {essid} (VAP: {vap_name}) at site {site}...")
         
-        # Map radio type to WiFi standard
-        # "ng" = 2.4 GHz (typically 802.11n)
-        # "na" = 5 GHz (typically 802.11ac)
-        # "ax" = 6 GHz (802.11ax)
-        RADIO_TYPE_MAP = {
-            "ng": "ieee802.11n",  # 2.4 GHz
-            "na": "ieee802.11ac",  # 5 GHz
-            "ax": "ieee802.11ax",  # 6 GHz
-        }
-        
-        radio = vap.get('radio', '')
-        interface_type = RADIO_TYPE_MAP.get(radio, "ieee802.11n")  # Default to 802.11n if unknown
-        
         # 1. Check if wireless LAN exists, if not create it
-        wireless_lan = ctx.nb.wireless.wireless_lans.get(ssid=essid, site_id=site.id)
-        if not wireless_lan:
-            try:
-                wireless_lan = ctx.nb.wireless.wireless_lans.create({
-                    'ssid': essid,
-                    'site': site.id,
-                    'vrf': vrf.id,
-                    'tenant': ctx.tenant.id,
-                    'status': 'active',
-                })
-                logger.info(f"Created wireless LAN {essid} with ID {wireless_lan.id} at site {site}.")
-            except pynetbox.core.query.RequestError as e:
-                logger.exception(f"Failed to create wireless LAN {essid} at site {site}: {e}")
-                return
-        else:
-            logger.debug(f"Wireless LAN {essid} already exists with ID {wireless_lan.id}.")
+        # TODO: this should not be done here, as it will create duplicates
+        wireless_lan = get_or_create_wireless_lan(essid, site, vrf, ctx)
         
-        # 2. Check if interface exists, if not create it
-        interface = ctx.nb.dcim.interfaces.get(device_id=nb_device.id, name=vap_name)
-        
-        # Format rf_channel if channel is available
-        # Note: Bandwidth is determined by NetBox's channel definitions, not the VAP bw field
-        channel = vap.get('channel')
-        rf_channel = None
-        if channel and radio:
-            try:
-                rf_channel = format_rf_channel(radio, channel)
-                if not rf_channel:
-                    logger.warning(f"Invalid channel {channel} for radio {radio} in VAP {vap_name}. Skipping rf_channel.")
-            except Exception as e:
-                logger.warning(f"Failed to format rf_channel for VAP {vap_name}: {e}")
-        
-        if not interface:
-            try:
-                interface_data = {
-                    'device': nb_device.id,
-                    'name': vap_name,
-                    'type': interface_type,
-                    'enabled': vap.get('up', True),
-                    'vrf': vrf.id,
-                    'rf_role': 'ap',  # Access point role
-                    'wireless_lans': [wireless_lan.id],
-                }
-                
-                # Add rf_channel if available
-                if rf_channel:
-                    interface_data['rf_channel'] = rf_channel
-                write_postable_fields(ctx.netbox_url, ctx.netbox_token, 'dcim/interfaces')
-                interface = ctx.nb.dcim.interfaces.create(interface_data)
-                logger.info(f"Created wireless interface {vap_name} with ID {interface.id} on device {nb_device.name}.")
-            except pynetbox.core.query.RequestError as e:
-                logger.exception(f"Failed to create interface {vap_name} for device {nb_device.name} at site {site}: {e}")
-                return
-        else:
-            logger.debug(f"Interface {vap_name} already exists with ID {interface.id} on device {nb_device.name}.")
-            # Update interface if needed (wireless_lan, channel, etc.)
-            try:
-                update_needed = False
-                # Get current wireless_lan ID (handle both object and ID cases)
-                current_wlan_id = interface.wireless_lan.id if hasattr(interface.wireless_lan, 'id') else interface.wireless_lan
-                if current_wlan_id != wireless_lan.id:
-                    interface.wireless_lan = wireless_lan.id
-                    update_needed = True
-                if rf_channel:
-                    current_rf_channel = interface.rf_channel
-                    if current_rf_channel != rf_channel:
-                        interface.rf_channel = rf_channel
-                        update_needed = True
-                if update_needed:
-                    interface.save()
-                    logger.info(f"Updated interface {vap_name} on device {nb_device.name}.")
-            except Exception as e:
-                logger.warning(f"Failed to update interface {vap_name}: {e}")
+        interface = create_wireless_interface(nb_device, site, vap, ctx, vrf, wireless_lan)
         
         # Add MAC address (BSSID) to interface
         mac = vap.get('bssid')
         if mac and interface:
             add_mac_address_to_interface(mac, interface, nb_device.name, ctx, set_as_primary=True)
-
-        # Add IP address to interface
-        ip = vap.get('ip')
-        if ip and interface:
-            add_ip_address_to_interface(ip, interface, vrf, nb_device.name, ctx, set_as_primary=True)
         
     except Exception as e:
         logger.exception(f"Failed to process wireless network {vap.get('name', 'Unknown')} at site {site}: {e}")
+
+def get_or_create_wireless_lan(essid, site: Sites, vrf: pynetbox.core.response.Record, ctx: AppContext):
+    """
+    Get or create a wireless LAN in NetBox.
+    
+    Args:
+        essid: ESSID of the wireless LAN
+        site: NetBox site object
+        vrf: VRF record
+        ctx: Application context
+    """
+    wireless_lan = ctx.nb.wireless.wireless_lans.get(ssid=essid, site_id=site.id)
+    if not wireless_lan:
+        try:
+            wireless_lan = ctx.nb.wireless.wireless_lans.create({
+                'ssid': essid,
+                'site': site.id,
+                'vrf': vrf.id,
+                'tenant': ctx.tenant.id,
+                'status': 'active',
+            })
+            logger.info(f"Created wireless LAN {essid} with ID {wireless_lan.id} at site {site}.")
+        except pynetbox.core.query.RequestError as e:
+            logger.exception(f"Failed to create wireless LAN {essid} at site {site}: {e}")
+            return
+    else:
+        logger.debug(f"Wireless LAN {essid} already exists with ID {wireless_lan.id}.")
+    
+    return wireless_lan
+
+def create_wireless_interface(nb_device: pynetbox.core.response.Record, site: Sites, vap: dict, ctx: AppContext, vrf: pynetbox.core.response.Record, wireless_lan: pynetbox.core.response.Record):
+    """
+    Create a wireless interface in NetBox.
+    
+    Args:
+        nb_device: NetBox device record
+        site: NetBox site object
+        vap: UniFi wireless network dictionary
+        ctx: Application context
+        vrf: VRF record
+        wireless_lan: Wireless LAN record
+    """
+    # 2. Check if interface exists, if not create it
+    radio = vap.get('radio', '')
+    interface_type = RADIO_TYPE_MAP.get(radio, "ieee802.11n")  # Default to 802.11n if unknown
+    vap_name = vap.get('name')
+    interface = ctx.nb.dcim.interfaces.get(device_id=nb_device.id, name=vap_name)
+    
+    # Format rf_channel if channel is available
+    # Note: Bandwidth is determined by NetBox's channel definitions, not the VAP bw field
+    channel = vap.get('channel')
+    rf_channel = None
+    if channel and radio:
+        try:
+            rf_channel = format_rf_channel(radio, channel)
+            if not rf_channel:
+                logger.warning(f"Invalid channel {channel} for radio {radio} in VAP {vap_name}. Skipping rf_channel.")
+        except Exception as e:
+            logger.warning(f"Failed to format rf_channel for VAP {vap_name}: {e}")
+    
+    if not interface:
+        try:
+            interface_data = {
+                'device': nb_device.id,
+                'name': vap_name,
+                'type': interface_type,
+                'enabled': vap.get('up', True),
+                'vrf': vrf.id,
+                'rf_role': 'ap',  # Access point role
+                'wireless_lans': [wireless_lan.id],
+            }
+            
+            # Add rf_channel if available
+            if rf_channel:
+                interface_data['rf_channel'] = rf_channel
+            interface = ctx.nb.dcim.interfaces.create(interface_data)
+            logger.info(f"Created wireless interface {vap_name} with ID {interface.id} on device {nb_device.name}.")
+        except pynetbox.core.query.RequestError as e:
+            logger.exception(f"Failed to create interface {vap_name} for device {nb_device.name} at site {site}: {e}")
+            return
+    else:
+        logger.debug(f"Interface {vap_name} already exists with ID {interface.id} on device {nb_device.name}.")
+        # Update interface if needed (wireless_lan, channel, etc.)
+        try:
+            update_needed = False
+            # Get current wireless_lan ID (handle both object and ID cases)
+            current_wlan_id = interface.wireless_lan.id if hasattr(interface.wireless_lan, 'id') else interface.wireless_lan
+            if current_wlan_id != wireless_lan.id:
+                interface.wireless_lan = wireless_lan.id
+                update_needed = True
+            if rf_channel:
+                current_rf_channel = interface.rf_channel
+                if current_rf_channel != rf_channel:
+                    interface.rf_channel = rf_channel
+                    update_needed = True
+            if update_needed:
+                interface.save()
+                logger.info(f"Updated interface {vap_name} on device {nb_device.name}.")
+        except Exception as e:
+            logger.warning(f"Failed to update interface {vap_name}: {e}")

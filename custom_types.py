@@ -166,3 +166,13 @@ MAX_SPEED_MAP = {
     500000: "500gbase-t",
     1000000: "1000gbase-t",
 }
+
+# Map radio type to WiFi standard
+# "ng" = 2.4 GHz (typically 802.11n)
+# "na" = 5 GHz (typically 802.11ac)
+# "ax" = 6 GHz (802.11ax)
+RADIO_TYPE_MAP = {
+    "ng": "ieee802.11n",  # 2.4 GHz
+    "na": "ieee802.11ac",  # 5 GHz
+    "ax": "ieee802.11ax",  # 6 GHz
+}
