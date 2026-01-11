@@ -201,13 +201,11 @@ def get_or_create_wireless_lan(essid, site: Sites, vrf: pynetbox.core.response.R
         vrf: VRF record
         ctx: Application context
     """
-    wireless_lan = ctx.nb.wireless.wireless_lans.get(ssid=essid, site_id=site.id)
+    wireless_lan = ctx.nb.wireless.wireless_lans.get(ssid=essid)
     if not wireless_lan:
         try:
             wireless_lan = ctx.nb.wireless.wireless_lans.create({
                 'ssid': essid,
-                'site': site.id,
-                'vrf': vrf.id,
                 'tenant': ctx.tenant.id,
                 'status': 'active',
             })
