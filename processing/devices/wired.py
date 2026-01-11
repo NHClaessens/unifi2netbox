@@ -23,6 +23,8 @@ def process_wired_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContex
     try:
         # Wired devices use the LAN role
         nb_device = process_base_device(unifi, site, device, ctx, ctx.roles[Roles.LAN], vrf)
+        if not nb_device:
+            return
 
         # Add MAC address to all ports in port_table
         for port in device.get("port_table", []):
@@ -31,6 +33,8 @@ def process_wired_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContex
             if mac:
                 add_mac_address_to_interface(mac, interface, device['name'], ctx, set_as_primary=True, allow_duplicate=True)
         
+            interface.duplex
+
         if nb_device:
             logger.info(f"Successfully processed wired device {device['name']} at site {site}.")
             

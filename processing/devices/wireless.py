@@ -290,3 +290,5 @@ def create_wireless_interface(nb_device: pynetbox.core.response.Record, site: Si
                 logger.info(f"Updated interface {vap_name} on device {nb_device.name}.")
         except Exception as e:
             logger.warning(f"Failed to update interface {vap_name}: {e}")
+    
+    return interface
