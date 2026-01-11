@@ -148,7 +148,21 @@ def process_wireless_device(unifi: Unifi, site: Sites, device: dict, ctx: AppCon
                 logger.debug(f"Device {device['name']} has {len(vap_table)} wireless networks (VAPs)")
                 for vap in vap_table:
                     process_wireless_vap(nb_device, site, vap, ctx, vrf)
-            
+
+            port_table = device.get("port_table", [])
+            ethernet_table = device.get("ethernet_table", [])
+
+            # For APs with more than 1 port
+            if port_table:
+                for port in port_table:
+                    interface = ctx.nb.dcim.interfaces.get(device_id=nb_device.id, name=port["name"])
+                    if interface:
+                        add_mac_address_to_interface(device["mac"], interface, nb_device.name, ctx, set_as_primary=True, allow_duplicate=True)
+            # For APs with single port
+            elif ethernet_table:
+                interface = ctx.nb.dcim.interfaces.get(device_id=nb_device.id, name="eth0")
+                if interface:
+                    add_mac_address_to_interface(device["mac"], interface, nb_device.name, ctx, set_as_primary=True, allow_duplicate=True)
     except Exception as e:
         logger.exception(f"Failed to process wireless device {device.get('name')} at site {site}: {e}")
 

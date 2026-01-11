@@ -47,14 +47,18 @@ def create_interface_templates(device: dict, device_type_id: int, ctx: AppContex
         device_type_id: NetBox device type ID
         ctx: Application context
     """
-    template_exists = ctx.nb.dcim.interface_templates.filter(device_type=device_type_id)
-    if template_exists:
-        logger.debug(f"Interface templates for device {device['name']} already exist. Skipping...")
-        return
-    
     port_table = device.get("port_table", [])
     ethernet_table = device.get("ethernet_table", [])
-    logger.warning(f"Ethernet table for device {device['name']}: {ethernet_table}, port table len: {len(port_table)}")
+    exising_templates = ctx.nb.dcim.interface_templates.filter(device_type=device_type_id)
+    logger.warning(f"Ethernet table for device {device['name']}: {ethernet_table}, port table len: {len(port_table)}, template exists: {len(exising_templates)}")
+    if exising_templates:
+        logger.debug(f"Interface templates for device {device['name']} already exist. Deleting...")
+        delete_success = exising_templates.delete()
+        if not delete_success:
+            logger.error(f"Failed to delete interface templates for device {device['name']}.")
+            return
+    
+ 
     if len(port_table) > 0:
         logger.debug(f"Port table for device {device['name']}: {len(port_table)} ports")
         for port in port_table:
@@ -73,10 +77,12 @@ def create_interface_templates(device: dict, device_type_id: int, ctx: AppContex
     elif len(ethernet_table) > 0:
         # Use this for APs with single ports, as they do not define a port_table
         logger.debug(f"Ethernet table for device {device['name']}: {len(ethernet_table)} ports")
-        template = ctx.nb.dcim.interface_templates.create({
-            "device_type": device_type_id,
-            "name": 'eth0',
-            "type": MAX_SPEED_MAP.get(device['uplink'].get("max_speed"), "1000base-t"),
-        })
-        if template:
-            logger.info(f"Interface template {port['name']} with ID {template.id} successfully added to NetBox.")
+        template = ctx.nb.dcim.interface_templates.get(device_type=device_type_id, name='eth0')
+        if not template:
+            template = ctx.nb.dcim.interface_templates.create({
+                "device_type": device_type_id,
+                "name": 'eth0',
+                "type": MAX_SPEED_MAP.get(device['uplink'].get("max_speed"), "1000base-t"),
+            })
+            if template:
+                logger.info(f"Interface template eth0 with ID {template.id} successfully added to NetBox.")
