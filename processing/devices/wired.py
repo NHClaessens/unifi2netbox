@@ -1,6 +1,7 @@
 """Process wired network devices (switches, routers)."""
 from custom_types import Roles
 from logger import logger
+from processing.common import add_mac_address_to_interface
 from unifi.sites import Sites
 from unifi.unifi import Unifi
 from context import AppContext
@@ -22,6 +23,13 @@ def process_wired_device(unifi: Unifi, site: Sites, device: dict, ctx: AppContex
     try:
         # Wired devices use the LAN role
         nb_device = process_base_device(unifi, site, device, ctx, ctx.roles[Roles.LAN], vrf)
+
+        # Add MAC address to all ports in port_table
+        for port in device.get("port_table", []):
+            interface = ctx.nb.dcim.interfaces.get(device_id=nb_device.id, name=port["name"])
+            mac = device.get("mac")
+            if mac:
+                add_mac_address_to_interface(mac, interface, device['name'], ctx, set_as_primary=True, allow_duplicate=True)
         
         if nb_device:
             logger.info(f"Successfully processed wired device {device['name']} at site {site}.")

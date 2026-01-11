@@ -9,7 +9,8 @@ def add_mac_address_to_interface(
     interface: pynetbox.core.response.Record, 
     device_name: str, 
     ctx: AppContext, 
-    set_as_primary: bool = False
+    set_as_primary: bool = False,
+    allow_duplicate: bool = False
     ) -> bool:
     """
     Add MAC address to an interface in NetBox.
@@ -29,8 +30,8 @@ def add_mac_address_to_interface(
     
     try:
         # Check if MAC address already exists
-        existing_mac = ctx.nb.dcim.mac_addresses.get(mac_address=device_mac)
-        if existing_mac:
+        existing_mac = ctx.nb.dcim.mac_addresses.filter(mac_address=device_mac)
+        if len(existing_mac) > 0 and not allow_duplicate:
             logger.debug(f"MAC address {device_mac} already exists in NetBox.")
             return True
         
