@@ -149,6 +149,7 @@ class Roles(StrEnum):
     CLIENT_WIRED = 'CLIENT_WIRED'
     CLIENT_WIRELESS = 'CLIENT_WIRELESS'
 
+# Choices can be found here: https://github.com/netbox-community/netbox/blob/main/netbox/dcim/choices.py
 SPEED_MAP = {
     "GE": "1000base-t",
     "2P5GE": "2.5gbase-t",
